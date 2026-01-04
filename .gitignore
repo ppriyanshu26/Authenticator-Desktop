@@ -1,7 +1,23 @@
-*.txt
-!requirements.txt
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.env
 
+# Build & Packaging
 build/
-*.spec
 dist/
-*.pyc
+*.spec
+*.msix
+Assets/
+result.xml
+
+# Security (NEVER COMMIT PFX FILES)
+*.pfx
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Keep requirements
+!requirements.txt

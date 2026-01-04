@@ -4,11 +4,21 @@ import customtkinter as ctk
 import pyotp
 import time
 import hashlib
+import ctypes
 import config
 import utils
 import reset_handler
 import creds_handler
 import export_handler
+
+# Set DPI Awareness
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(1)
+except Exception:
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
