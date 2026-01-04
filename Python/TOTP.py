@@ -173,7 +173,7 @@ def build_main_ui(root, otp_entries):
               fg_color="#2b2b2b", text_color="white", hover_color="#3d3d3d", height=45, corner_radius=0,
               command=lambda: open_popup(reset_handler.reset_password_popup, title="Reset Password", size="350x400", root=root, otp_entries=otp_entries, build_main_ui_callback=build_main_ui)).pack(side="left", fill="x", expand=True)
 
-    ctk.CTkButton(footer, text="➕ Edit Creds", font=("Segoe UI", 12),
+    ctk.CTkButton(footer, text="➕ Add Creds", font=("Segoe UI", 12),
               fg_color="#2b2b2b", text_color="white", hover_color="#3d3d3d", height=45, corner_radius=0,
               command=lambda: open_popup(creds_handler.edit_credentials_popup, title="Edit Credentials", size="350x450", root=root, build_main_ui_callback=build_main_ui)).pack(side="left", fill="x", expand=True)
 
