@@ -5,7 +5,6 @@ A secure desktop application (Tkinter-based) for managing Time-based One-Time Pa
 
 Features:
     - AES-256 encryption/decryption for securely storing OTP secrets.
-    - GitHub integration for fetching encrypted OTP data from a private repository.
     - Password-based application lock with SHA-256 hashing.
     - OTP list UI with live countdown timers and clipboard copy support.
     - Crypto utility for quick text encryption/decryption with the master key.
@@ -13,15 +12,13 @@ Features:
     - Encrypted local cache for authentication.
 
 Files:
-    - cache.txt   : Stores the hashed app password.
     - encoded.txt : Stores encrypted OTP entries (platform, encrypted URL).
 
 Usage:
     - On first run, prompts the user to create a password.
-    - On subsequent runs, requires password and decryption key to unlock.
-    - Allows importing encrypted OTPs from GitHub.
+    - On subsequent runs, requires password to unlock.
     - Displays OTP codes in real time with automatic refresh.
-    - Provides options to lock, reset password, manage GitHub tokens, and use a crypto utility.
+    - Provides options to lock, reset password, and use a crypto utility.
 
 Author: Priyanshu Priyam
 """
@@ -30,7 +27,6 @@ import tkinter as tk
 import pyotp
 import time
 import pyperclip
-import requests
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse, unquote
 import os
 import sys
@@ -58,7 +54,6 @@ APP_FOLDER = os.path.join(BASE_APP_DIR, "TOTP Authenticator")
 os.makedirs(APP_FOLDER, exist_ok=True)
 
 # File paths
-CACHE_FILE = os.path.join(APP_FOLDER, "cache.txt")
 ENCODED_FILE = os.path.join(APP_FOLDER, "encoded.txt")
 
 frames = []
@@ -99,27 +94,6 @@ def copy_and_toast(var, root):
 
 def on_mousewheel(event):
     canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-def get_cache_value(key):
-    if not os.path.exists(CACHE_FILE): return None
-    with open(CACHE_FILE, "r") as f:
-        for line in f:
-            if line.startswith(f"{key}="):
-                return line.strip().split("=", 1)[1]
-    return None
-
-def set_cache_value(key, value):
-    lines = []
-    if os.path.exists(CACHE_FILE):
-        with open(CACHE_FILE, "r") as f: lines = f.readlines()
-    found = False
-    with open(CACHE_FILE, "w") as f:
-        for line in lines:
-            if line.startswith(f"{key}="):
-                f.write(f"{key}={value}\n")
-                found = True
-            else: f.write(line)
-        if not found: f.write(f"{key}={value}\n")
 
 def save_password(password):
     hashed = hashlib.sha256(password.encode()).hexdigest()
@@ -166,20 +140,6 @@ def decode_encrypted_file():
                 except Exception: continue
     except FileNotFoundError: pass
     return decrypted_otps
-
-# ------------------- GitHub -------------------
-def download_github_file(url, token):
-    parsed = urlparse(url)
-    parts = parsed.path.strip("/").split("/")
-    if len(parts) < 5 or parts[2] != "blob": raise ValueError("Invalid GitHub blob URL")
-    owner, repo, _, branch = parts[:4]
-    file_path = "/".join(parts[4:])
-    api_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{file_path}?ref={branch}"
-    headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3.raw"}
-    response = requests.get(api_url, headers=headers)
-    if response.status_code == 200:
-        with open(ENCODED_FILE, "w", encoding="utf-8") as f: f.write(response.text)
-    else: raise Exception(f"Failed to fetch file: {response.status_code}")
 
 # ------------------- Enter Key -------------------
 def bind_enter(root, button):
@@ -255,39 +215,6 @@ def reset_password(parent):
                           font=("Segoe UI",10), bg="#444", fg="white", relief="flat", activebackground="#666")
     reset_btn.pack(pady=12)
     bind_enter(root, reset_btn)
-
-# ------------------- GitHub Credential -------------------
-def build_github_credential_screen(parent, otp_entries):
-    parent.resizable(False, False)
-    frame = tk.Frame(parent, bg="#1e1e1e")
-    frame.pack(expand=True, fill="both")
-    root.unbind_all("<Return>")
-
-    tk.Label(frame, text="🔗 Enter GitHub File URL", font=("Segoe UI",14,"bold"), bg="#1e1e1e", fg="white").pack(pady=(30,10))
-    url_entry = tk.Entry(frame, font=("Segoe UI",10), justify="center", width=40)
-    url_entry.pack(pady=(0,10)); url_entry.focus()
-    tk.Label(frame, text="GitHub Access Token", font=("Segoe UI",10,"bold"), bg="#1e1e1e", fg="white").pack(pady=(20,5))
-    token_entry = tk.Entry(frame, font=("Segoe UI",10), justify="center", show="*")
-    token_entry.pack(pady=(0,10))
-    error_label = tk.Label(frame, text="", fg="red", bg="#1e1e1e", font=("Segoe UI",9))
-    error_label.pack()
-
-    def save_url():
-        url, token = url_entry.get().strip(), token_entry.get().strip()
-        if not url.startswith("https://github.com/") or "/blob/" not in url: error_label.config(text="Invalid GitHub blob URL"); return
-        if not token: error_label.config(text="Token required"); return
-        try:
-            download_github_file(url, token)
-            otp_entries[:] = load_otps_from_decrypted(decode_encrypted_file())
-            build_main_ui(root, otp_entries)
-        except Exception as e:
-            error_label.config(text=f"Download failed: {str(e)}")
-
-    save_btn = tk.Button(frame, text="Save & Continue", font=("Segoe UI",10),
-                         bg="#444", fg="white", relief="flat", activebackground="#666",
-                         command=save_url)
-    save_btn.pack(pady=20)
-    bind_enter(root, save_btn)
 
 # ------------------- Crypto -------------------
 def open_crypto_screen(parent):
@@ -431,10 +358,6 @@ def build_main_ui(root, otp_entries):
               bg="#2b2b2b", fg="white", relief="flat", height=2,
               command=lambda: open_popup(reset_password, title="Reset Password", size="300x300")).pack(side="left", fill="x", expand=True)
 
-    tk.Button(footer, text="🗝 Token", font=("Segoe UI", 10),
-              bg="#2b2b2b", fg="white", relief="flat", height=2,
-              command=lambda: open_popup(lambda p: build_github_credential_screen(p, otp_entries), title="GitHub Token")).pack(side="left", fill="x", expand=True)
-
     tk.Button(footer, text="⚙️ Crypto", font=("Segoe UI", 10),
               bg="#2b2b2b", fg="white", relief="flat", height=2,
               command=lambda: open_popup(open_crypto_screen, title="Crypto Utility", size="370x300")).pack(side="left", fill="x", expand=True)
@@ -473,28 +396,19 @@ def build_create_password_screen(root, otp_entries):
                            command=submit_password)
     submit_btn.pack(pady=10); bind_enter(root, submit_btn)
 
-def check_password(root, entry, error_label, otp_entries, lock_frame, decrypt_entry):
+def check_password(root, entry, error_label, otp_entries, lock_frame):
     global decrypt_key
     stored_password = get_stored_password()
-    entered_hash = hashlib.sha256(entry.get().encode()).hexdigest()
+    entered_password = entry.get()
+    entered_hash = hashlib.sha256(entered_password.encode()).hexdigest()
     
     # Check if password matches
     if entered_hash == stored_password:
-        key_input = decrypt_entry.get().strip()
-        
-        # Check if decryption key is empty
-        if len(key_input) < 8:
-            error_label.config(text="❌ Decryption key is too short.")
-            return
-        
-        decrypt_key = key_input
+        decrypt_key = entered_password
         lock_frame.destroy()
         
-        if not os.path.exists(ENCODED_FILE):
-            build_github_credential_screen(root, otp_entries)
-        else:
-            otp_entries[:] = load_otps_from_decrypted(decode_encrypted_file())
-            build_main_ui(root, otp_entries)
+        otp_entries[:] = load_otps_from_decrypted(decode_encrypted_file())
+        build_main_ui(root, otp_entries)
     else:
         error_label.config(text="❌ Incorrect password")
 
@@ -503,12 +417,10 @@ def build_lock_screen(root, otp_entries):
     root.unbind_all("<Return>")
     tk.Label(frame, text="🔒 Enter Password", font=("Segoe UI",14,"bold"), bg="#1e1e1e", fg="white").pack(pady=(30,10))
     entry = tk.Entry(frame, show="*", font=("Segoe UI",12), width=20, justify="center"); entry.pack(pady=(0,10)); entry.focus()
-    tk.Label(frame, text="🔑 Decryption Key", font=("Segoe UI",10,"bold"), bg="#1e1e1e", fg="white").pack(pady=(10,5))
-    decrypt_entry = tk.Entry(frame, show="*", font=("Segoe UI",12), width=20, justify="center"); decrypt_entry.pack(pady=(0,10))
     error_label = tk.Label(frame, text="", fg="red", bg="#1e1e1e", font=("Segoe UI",9)); error_label.pack()
     unlock_btn = tk.Button(frame, text="Unlock", font=("Segoe UI",10),
                            bg="#444", fg="white", relief="flat", activebackground="#666",
-                           command=lambda: check_password(root, entry, error_label, otp_entries, frame, decrypt_entry))
+                           command=lambda: check_password(root, entry, error_label, otp_entries, frame))
     unlock_btn.pack(pady=10); bind_enter(root, unlock_btn)
 
 # ------------------- Main -------------------
