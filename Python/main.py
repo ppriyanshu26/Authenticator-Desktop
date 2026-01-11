@@ -11,7 +11,6 @@ import reset_handler
 import creds_handler
 import export_handler
 
-# Set DPI Awareness
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(1)
 except Exception:
@@ -90,13 +89,10 @@ def render_otp_list(root, otp_entries, query=""):
 
             def confirm_delete(p=display_name, u=uri, path=enc_img_path):
                 if messagebox.askyesno("Delete Credential", f"Are you sure you want to delete '{p}'?"):
-                    print(f"Attempting to delete credential: {p}")
                     if utils.delete_credential(p, u, config.decrypt_key, path):
-                        print(f"Successfully deleted: {p}")
                         otp_entries[:] = utils.load_otps_from_decrypted(utils.decode_encrypted_file())
                         render_otp_list(root, otp_entries)
                     else:
-                        print(f"Failed to delete: {p}")
                         messagebox.showerror("Error", "Failed to delete credential")
 
             delete_btn.configure(command=confirm_delete)

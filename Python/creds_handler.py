@@ -7,6 +7,8 @@ import hashlib
 import config
 import utils
 import aes
+import qrcode
+import io
 
 import pyotp
 
@@ -37,8 +39,28 @@ def add_credential(platform, username=None, secret=None, qr_path=None, key=None)
             secret = secret.replace(" ", "").upper()
             pyotp.TOTP(secret).now()
             uri = pyotp.totp.TOTP(secret).provisioning_uri(name=username, issuer_name=platform)
-        except Exception:
-            return False, "Invalid secret key (must be base32)"
+            
+            # Generate QR code for manual entry
+            qr = qrcode.QRCode(version=1, box_size=10, border=5)
+            qr.add_data(uri)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            
+            img_byte_arr = io.BytesIO()
+            img.save(img_byte_arr, format='PNG')
+            qr_bytes = img_byte_arr.getvalue()
+            
+            qr_folder = os.path.join(config.APP_FOLDER, "qrs")
+            os.makedirs(qr_folder, exist_ok=True)
+            
+            enc_img_data = crypto.encrypt_bytes(qr_bytes)
+            safe_name = hashlib.md5(f"{platform}{time.time()}".encode()).hexdigest()
+            enc_img_path = os.path.join(qr_folder, f"{safe_name}.enc")
+            
+            with open(enc_img_path, 'wb') as f:
+                f.write(enc_img_data)
+        except Exception as e:
+            return False, f"Error generating QR for manual entry: {e}"
     else:
         return False, "Provide either a QR code or Secret Key + Username"
     

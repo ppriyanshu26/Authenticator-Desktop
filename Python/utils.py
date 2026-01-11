@@ -13,12 +13,16 @@ from PIL import Image, ImageTk, ImageFilter
 import io
 
 def read_qr_from_bytes(image_bytes):
-    nparr = np.frombuffer(image_bytes, np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    if img is None: return None
-    detector = cv2.QRCodeDetector()
-    data, _, _ = detector.detectAndDecode(img)
-    return data
+    try:
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is None:
+            return None
+        detector = cv2.QRCodeDetector()
+        data, _, _ = detector.detectAndDecode(img)
+        return data
+    except Exception as e:
+        return None
 
 def load_otps_from_decrypted(decrypted_otps):
     entries = [(name.strip(), uri.strip(), img_path) for name, uri, img_path in decrypted_otps if "otpauth://" in uri]
@@ -79,19 +83,22 @@ def decode_encrypted_file():
                             uri = read_qr_from_bytes(img_bytes)
                             if uri:
                                 decrypted_otps.append((platform, uri, enc_img_path))
-                except Exception:
+                except Exception as e:
                     continue
     except FileNotFoundError: pass
     return decrypted_otps
 
 def get_qr_image(enc_img_path, key, blur=True):
-    if not os.path.exists(enc_img_path): return None
+    if not os.path.exists(enc_img_path):
+        return None
     crypto = aes.Crypto(key)
     try:
         with open(enc_img_path, 'rb') as f:
             enc_data = f.read()
         img_bytes = crypto.decrypt_bytes(enc_data)
         img = Image.open(io.BytesIO(img_bytes))
+        if img.mode != "RGBA":
+            img = img.convert("RGBA")
         img = img.resize((200, 200), Image.Resampling.LANCZOS)
         if blur:
             img = img.filter(ImageFilter.GaussianBlur(radius=15))
@@ -101,7 +108,6 @@ def get_qr_image(enc_img_path, key, blur=True):
 
 def delete_credential(platform_to_delete, uri_to_delete, key, path_to_delete=None):
     if not os.path.exists(config.ENCODED_FILE):
-        print(f"Error: Encoded file not found at {config.ENCODED_FILE}")
         return False
     
     crypto = aes.Crypto(key)
@@ -123,8 +129,7 @@ def delete_credential(platform_to_delete, uri_to_delete, key, path_to_delete=Non
             
             try:
                 decrypted_line = crypto.decrypt_aes(line)
-            except Exception as e:
-                print(f"Warning: Failed to decrypt a line: {e}")
+            except Exception:
                 new_lines.append(line)
                 continue
 
@@ -149,8 +154,8 @@ def delete_credential(platform_to_delete, uri_to_delete, key, path_to_delete=Non
                 if enc_img_path and enc_img_path != "NONE" and os.path.exists(enc_img_path):
                     try:
                         os.remove(enc_img_path)
-                    except Exception as e:
-                        print(f"Warning: Failed to remove QR file {enc_img_path}: {e}")
+                    except Exception:
+                        pass
                 deleted = True
                 continue
             
@@ -161,12 +166,8 @@ def delete_credential(platform_to_delete, uri_to_delete, key, path_to_delete=Non
                 for nl in new_lines:
                     f.write(nl + "\n")
             return True
-        else:
-            print(f"Error: No matching credential found for '{platform_to_delete}'")
-    except Exception as e:
-        print(f"Deletion failed with exception: {e}")
-        import traceback
-        traceback.print_exc()
+    except Exception:
+        pass
         
     return False
 
