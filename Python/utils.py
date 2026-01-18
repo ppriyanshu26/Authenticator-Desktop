@@ -181,3 +181,12 @@ def delete_credential(platform_to_delete, uri_to_delete, key, path_to_delete=Non
 def bind_enter(root, button):
     root.unbind_all("<Return>")
     root.bind_all("<Return>", lambda event: button.invoke())
+def truncate_platform_name(name, max_length=20):
+    if len(name) > max_length:
+        return name[:max_length] + "..."
+    return name
+
+def truncate_username(username, max_length=35):
+    if len(username) > max_length:
+        return username[:max_length] + "..."
+    return username

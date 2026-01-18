@@ -72,7 +72,8 @@ def render_otp_list(root, otp_entries, query=""):
             header = ctk.CTkFrame(card, fg_color="transparent")
             header.pack(fill="x", padx=10, pady=(10, 0))
 
-            ctk.CTkLabel(header, text=display_name, font=("Segoe UI", 14, "bold"), text_color="#ffffff").pack(side="left")
+            truncated_display_name = utils.truncate_platform_name(display_name)
+            ctk.CTkLabel(header, text=truncated_display_name, font=("Segoe UI", 14, "bold"), text_color="#ffffff").pack(side="left")
             delete_btn = ctk.CTkButton(header, text="Delete", width=60, height=24, font=("Segoe UI", 11), fg_color="transparent", text_color="#ff4d4d", hover_color="#3d3d3d")
             delete_btn.pack(side="right", padx=(5, 0))
             
@@ -85,7 +86,8 @@ def render_otp_list(root, otp_entries, query=""):
                 creds_handler.show_delete_confirmation_screen(root, p, u, path, otp_entries, build_main_ui)
 
             delete_btn.configure(command=confirm_delete)
-            ctk.CTkLabel(card, text=username, font=("Segoe UI", 11), text_color="#aaaaaa", anchor="w").pack(fill="x", padx=10)
+            truncated_username = utils.truncate_username(username)
+            ctk.CTkLabel(card, text=truncated_username, font=("Segoe UI", 11), text_color="#aaaaaa", anchor="w").pack(fill="x", padx=10)
             
             bottom = ctk.CTkFrame(card, fg_color="transparent")
             bottom.pack(fill="x", padx=10, pady=(5, 10))
