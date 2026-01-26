@@ -16,6 +16,10 @@ def add_credential(platform, username=None, secret=None, qr_path=None, key=None)
         if not uri:
             return False, "Could not read QR code from image"
         
+        secret = utils.extract_secret_from_uri(uri)
+        _, _, username_from_uri = utils.clean_uri(uri)
+        if not username: username = username_from_uri
+        
         qr_folder = os.path.join(config.APP_FOLDER, "qrs")
         os.makedirs(qr_folder, exist_ok=True)
         
@@ -50,15 +54,24 @@ def add_credential(platform, username=None, secret=None, qr_path=None, key=None)
             with open(enc_img_path, 'wb') as f:
                 f.write(enc_img_data)
         except Exception as e:
-            return False, f"Error generating QR for manual entry: {e}"
+            return False, f"Error generating QR: {e}"
     else:
         return False, "Provide either a QR code or Secret Key + Username"
     
-    line_to_encrypt = f"{platform}|{uri}|{enc_img_path}"
-    encrypted_line = crypto.encrypt_aes(line_to_encrypt)
+    cred_id = utils.generate_id(platform, secret)
     
-    with open(config.ENCODED_FILE, 'a') as f:
-        f.write(encrypted_line + "\n")
+    new_cred = {
+        "id": cred_id,
+        "platform": platform,
+        "username": username,
+        "secretcode": secret
+    }
+
+    if enc_img_path != "NONE":
+        utils.save_image_path(cred_id, enc_img_path)
+    all_creds = utils.decode_encrypted_file()
+    all_creds.append(new_cred)
+    utils.save_otps_encrypted(all_creds, key)
     
     return True, "Credential added successfully"
 
@@ -166,13 +179,16 @@ def edit_credentials_popup(parent, root, build_main_ui_callback):
     edit_credentials_full_ui(root, build_main_ui_callback)
 
 
-def show_delete_confirmation_screen(root, display_name, uri, enc_img_path, otp_entries, build_main_ui_callback):
+def show_delete_confirmation_screen(root, cred, otp_entries, build_main_ui_callback):
     for widget in root.winfo_children():
         widget.destroy()
     root.unbind_all("<Return>")
     root.unbind_all("<Escape>")
     
-    cleaned_uri, issuer, username = utils.clean_uri(uri)
+    display_name = cred.get('platform', 'Unknown')
+    username = cred.get('username', 'Unknown')
+    cred_id = cred.get('id')
+    
     truncated_name = utils.truncate_platform_name(display_name)
     truncated_username = utils.truncate_username(username)
     
@@ -197,7 +213,7 @@ def show_delete_confirmation_screen(root, display_name, uri, enc_img_path, otp_e
     button_frame.pack(pady=10)
     
     def perform_delete():
-        if utils.delete_credential(display_name, uri, config.decrypt_key, enc_img_path):
+        if utils.delete_credential(cred_id, config.decrypt_key):
             otp_entries[:] = utils.load_otps_from_decrypted(utils.decode_encrypted_file())
             build_main_ui_callback(root, otp_entries)
     

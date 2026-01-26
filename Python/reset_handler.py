@@ -2,54 +2,21 @@ import customtkinter as ctk
 import hashlib, os, config, utils, aes
 
 def reencrypt_all_data(old_key, new_key):
-    if not os.path.exists(config.ENCODED_FILE):
-        return True
+    original_key = config.decrypt_key
+    config.decrypt_key = old_key
     
+    otps = utils.decode_encrypted_file()
+    if not otps and os.path.exists(config.ENCODED_FILE):
+        config.decrypt_key = original_key
+        return False
+
     old_crypto = aes.Crypto(old_key)
     new_crypto = aes.Crypto(new_key)
-    new_lines = []
     
     try:
-        with open(config.ENCODED_FILE, 'r') as f:
-            lines = f.readlines()
-            
-        for line in lines:
-            line = line.strip()
-            if not line: continue
-            
-            try:
-                decrypted_line = old_crypto.decrypt_aes(line)
-            except Exception:
-                print("Warning: Could not decrypt a line during re-encryption. Skipping.")
-                continue
-
-            platform, uri, enc_img_path = None, None, None
-            
-            if '|' in decrypted_line:
-                parts = decrypted_line.split('|')
-                if len(parts) == 3:
-                    platform, uri, enc_img_path = [p.strip() for p in parts]
-            if '|' in decrypted_line:
-                parts = decrypted_line.split('|')
-                if len(parts) == 3:
-                    platform, uri, enc_img_path = [p.strip() for p in parts]
-            elif ': ' in decrypted_line:
-                parts = decrypted_line.split(': ', 1)
-                platform = parts[0].strip()
-                enc_img_path = parts[1].strip()
-                if os.path.exists(enc_img_path):
-                    try:
-                        with open(enc_img_path, 'rb') as f_img:
-                            old_enc_data = f_img.read()
-                        raw_img_data = old_crypto.decrypt_bytes(old_enc_data)
-                        uri = utils.read_qr_from_bytes(raw_img_data)
-                    except Exception as e:
-                        pass
-            
-            if not platform:
-                continue
-
-            if enc_img_path and enc_img_path != "NONE" and os.path.exists(enc_img_path):
+        image_paths = utils.load_image_paths()
+        for cred_id, enc_img_path in image_paths.items():
+            if enc_img_path and os.path.exists(enc_img_path):
                 try:
                     with open(enc_img_path, 'rb') as img_f:
                         old_enc_data = img_f.read()
@@ -62,18 +29,13 @@ def reencrypt_all_data(old_key, new_key):
                 except Exception as e:
                     print(f"Warning: Failed to re-encrypt image {enc_img_path}: {e}")
 
-            new_line_content = f"{platform}|{uri if uri else ''}|{enc_img_path if enc_img_path else 'NONE'}"
-            new_line = new_crypto.encrypt_aes(new_line_content)
-            new_lines.append(new_line)
-            
-        with open(config.ENCODED_FILE, 'w') as f:
-            for nl in new_lines:
-                f.write(nl + "\n")
+        utils.save_otps_encrypted(otps, new_key)
+        
+        config.decrypt_key = new_key
         return True
     except Exception as e:
         print(f"Re-encryption failed: {e}")
-        import traceback
-        traceback.print_exc()
+        config.decrypt_key = original_key
         return False
 
 def reset_password_full_ui(root, otp_entries, build_main_ui_callback):

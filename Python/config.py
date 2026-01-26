@@ -16,7 +16,8 @@ else:
 
 APP_FOLDER = os.path.join(BASE_APP_DIR, "CipherAuth")
 os.makedirs(APP_FOLDER, exist_ok=True)
-ENCODED_FILE = os.path.join(APP_FOLDER, "creds.txt")
+ENCODED_FILE = os.path.join(APP_FOLDER, "creds.json")
+IMAGE_PATH_FILE = os.path.join(APP_FOLDER, "images.json")
 
 decrypt_key = None
 toast_label = None

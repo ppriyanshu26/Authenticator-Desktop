@@ -1,5 +1,5 @@
 import customtkinter as ctk
-import pyperclip, os, hashlib, config, cv2, aes, io
+import pyperclip, os, hashlib, config, cv2, aes, io, json, time
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse, unquote
 import numpy as np
 from PIL import Image, ImageFilter
@@ -17,10 +17,11 @@ def read_qr_from_bytes(image_bytes):
         return None
 
 def load_otps_from_decrypted(decrypted_otps):
-    entries = [(name.strip(), uri.strip(), img_path) for name, uri, img_path in decrypted_otps if "otpauth://" in uri]
-    return sorted(entries, key=lambda x: x[0].lower())
+    return sorted(decrypted_otps, key=lambda x: x.get('platform', '').lower())
 
 def clean_uri(uri):
+    if not uri or "otpauth://" not in uri:
+        return "", "", ""
     parsed = urlparse(uri)
     query = parse_qs(parsed.query)
     label = unquote(parsed.path.split('/')[-1])
@@ -34,13 +35,104 @@ def clean_uri(uri):
     parsed = parsed._replace(query=urlencode(query, doseq=True))
     return urlunparse(parsed), label_issuer, username
 
-def copy_and_toast(var, root):
-    pyperclip.copy(var.get())
-    if config.toast_label: config.toast_label.destroy()
-    config.toast_label = ctk.CTkLabel(root, text="✅ Copied to clipboard", fg_color="#22cc22", text_color="white",
-                           font=("Segoe UI", 12), corner_radius=8, padx=12, pady=6)
-    config.toast_label.place(relx=0.5, rely=0.9, anchor='s')
-    root.after(1500, config.toast_label.destroy)
+def generate_id(platform, secret, salt=None):
+    if salt is None:
+        salt = str(time.time())
+    combo = f"{platform}{secret}{salt}"
+    return hashlib.sha256(combo.encode()).hexdigest()
+
+def save_otps_encrypted(otp_list, key):
+    crypto = aes.Crypto(key)
+    json_data = json.dumps(otp_list)
+    encrypted_data = crypto.encrypt_aes(json_data)
+    with open(config.ENCODED_FILE, 'w') as f:
+        f.write(encrypted_data)
+
+def decode_encrypted_file():
+    if not config.decrypt_key: return []
+    if not os.path.exists(config.ENCODED_FILE): return []
+    
+    crypto = aes.Crypto(config.decrypt_key)
+    try:
+        with open(config.ENCODED_FILE, 'r') as infile:
+            content = infile.read().strip()
+            if not content: return []
+            
+            try:
+                decrypted_content = crypto.decrypt_aes(content)
+                data = json.loads(decrypted_content)
+                if isinstance(data, list):
+                    return data
+            except Exception:
+                return [] 
+    except Exception:
+        return []
+    return []
+
+def extract_secret_from_uri(uri):
+    try:
+        parsed = urlparse(uri)
+        query = parse_qs(parsed.query)
+        return query.get('secret', [None])[0]
+    except Exception:
+        return None
+
+def load_image_paths():
+    if not os.path.exists(config.IMAGE_PATH_FILE):
+        return {}
+    try:
+        with open(config.IMAGE_PATH_FILE, 'r') as f:
+            content = f.read().strip()
+            if not content:
+                return {}
+            return json.loads(content)
+    except Exception:
+        return {}
+
+def save_image_path(cred_id, enc_img_path):
+    image_paths = load_image_paths()
+    image_paths[cred_id] = enc_img_path
+    try:
+        with open(config.IMAGE_PATH_FILE, 'w') as f:
+            f.write(json.dumps(image_paths))
+        return True
+    except Exception:
+        return False
+
+def get_image_path(cred_id):
+    image_paths = load_image_paths()
+    return image_paths.get(cred_id)
+
+def delete_image_path(cred_id):
+    image_paths = load_image_paths()
+    if cred_id in image_paths:
+        del image_paths[cred_id]
+        try:
+            with open(config.IMAGE_PATH_FILE, 'w') as f:
+                f.write(json.dumps(image_paths))
+            return True
+        except Exception:
+            return False
+    return True
+
+def get_qr_image(cred_id, key, blur=True):
+    enc_img_path = get_image_path(cred_id)
+    if not enc_img_path or not os.path.exists(enc_img_path):
+        return None
+    crypto = aes.Crypto(key)
+    try:
+        with open(enc_img_path, 'rb') as f:
+            enc_data = f.read()
+        img_bytes = crypto.decrypt_bytes(enc_data)
+        img = Image.open(io.BytesIO(img_bytes))
+        if img.mode != "RGBA":
+            img = img.convert("RGBA")
+        img = img.resize((200, 200), Image.Resampling.LANCZOS)
+        if blur:
+            img = img.filter(ImageFilter.GaussianBlur(radius=15))
+        return img
+    except Exception:
+        return None
 
 def save_password(password):
     hashed = hashlib.sha256(password.encode()).hexdigest()
@@ -64,118 +156,27 @@ def get_stored_password():
     except Exception:
         return None
 
-def decode_encrypted_file():
-    if not config.decrypt_key: return []
-    decrypted_otps = []
-    crypto = aes.Crypto(config.decrypt_key)
-    try:
-        with open(config.ENCODED_FILE, 'r') as infile:
-            for line in infile:
-                line = line.strip()
-                if not line: continue
-                try:
-                    decrypted_line = crypto.decrypt_aes(line)
-                    if '|' in decrypted_line:
-                        parts = decrypted_line.split('|')
-                        if len(parts) == 3:
-                            platform, uri, enc_img_path = parts
-                            decrypted_otps.append((platform, uri, enc_img_path))
-                    elif ': ' in decrypted_line:
-                        platform, enc_img_path = decrypted_line.split(': ', 1)
-                        
-                        if os.path.exists(enc_img_path):
-                            with open(enc_img_path, 'rb') as f:
-                                enc_data = f.read()
-                            img_bytes = crypto.decrypt_bytes(enc_data)
-                            uri = read_qr_from_bytes(img_bytes)
-                            if uri:
-                                decrypted_otps.append((platform, uri, enc_img_path))
-                except Exception as e:
-                    continue
-    except FileNotFoundError: pass
-    return decrypted_otps
-
-def get_qr_image(enc_img_path, key, blur=True):
-    if not os.path.exists(enc_img_path):
-        return None
-    crypto = aes.Crypto(key)
-    try:
-        with open(enc_img_path, 'rb') as f:
-            enc_data = f.read()
-        img_bytes = crypto.decrypt_bytes(enc_data)
-        img = Image.open(io.BytesIO(img_bytes))
-        if img.mode != "RGBA":
-            img = img.convert("RGBA")
-        img = img.resize((200, 200), Image.Resampling.LANCZOS)
-        if blur:
-            img = img.filter(ImageFilter.GaussianBlur(radius=15))
-        return img
-    except Exception:
-        return None
-
-def delete_credential(platform_to_delete, uri_to_delete, key, path_to_delete=None):
-    if not os.path.exists(config.ENCODED_FILE):
-        return False
-    
-    crypto = aes.Crypto(key)
-    new_lines = []
+def delete_credential(cred_id, key):
+    otps = decode_encrypted_file()
+    new_otps = []
     deleted = False
     
-    platform_to_delete = platform_to_delete.strip()
-    uri_to_delete = uri_to_delete.strip()
-    if path_to_delete:
-        path_to_delete = path_to_delete.strip()
-
-    try:
-        with open(config.ENCODED_FILE, 'r') as f:
-            lines = f.readlines()
-            
-        for line in lines:
-            line = line.strip()
-            if not line: continue
-            
-            try:
-                decrypted_line = crypto.decrypt_aes(line)
-            except Exception:
-                new_lines.append(line)
-                continue
-
-            platform, uri, enc_img_path = None, None, None
-            if '|' in decrypted_line:
-                parts = decrypted_line.split('|')
-                if len(parts) == 3:
-                    platform, uri, enc_img_path = [p.strip() for p in parts]
-            elif ': ' in decrypted_line:
-                parts = decrypted_line.split(': ', 1)
-                platform = parts[0].strip()
-                enc_img_path = parts[1].strip()
-
-            is_match = False
-            if platform == platform_to_delete:
-                if uri and uri == uri_to_delete:
-                    is_match = True
-                elif enc_img_path and (enc_img_path == uri_to_delete or (path_to_delete and enc_img_path == path_to_delete)):
-                    is_match = True
-
-            if is_match:
-                if enc_img_path and enc_img_path != "NONE" and os.path.exists(enc_img_path):
-                    try:
-                        os.remove(enc_img_path)
-                    except Exception:
-                        pass
-                deleted = True
-                continue
-            
-            new_lines.append(line)
-            
-        if deleted:
-            with open(config.ENCODED_FILE, 'w') as f:
-                for nl in new_lines:
-                    f.write(nl + "\n")
-            return True
-    except Exception:
-        pass
+    for cred in otps:
+        if cred.get('id') == cred_id:
+            enc_img_path = get_image_path(cred_id)
+            if enc_img_path and os.path.exists(enc_img_path):
+                try:
+                    os.remove(enc_img_path)
+                except Exception:
+                    pass
+            delete_image_path(cred_id)
+            deleted = True
+            continue
+        new_otps.append(cred)
         
+    if deleted:
+        save_otps_encrypted(new_otps, key)
+        return True
     return False
 
 def bind_enter(root, button):

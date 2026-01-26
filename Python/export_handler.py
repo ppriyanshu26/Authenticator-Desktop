@@ -11,9 +11,15 @@ def export_to_csv():
         
         with open(filepath, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(["Platform", "TOTP URL"])
-            for platform, uri, _ in otps:
-                writer.writerow([platform, uri])
+            writer.writerow(["ID", "Platform", "Username", "Secret", "TOTP URL"])
+            for cred in otps:
+                writer.writerow([
+                    cred.get('id', ''),
+                    cred.get('platform', ''),
+                    cred.get('username', ''),
+                    cred.get('secretcode', ''),
+                    cred.get('uri', '')
+                ])
                 
         return True, f"✅ File saved to desktop"
     except Exception as e:
