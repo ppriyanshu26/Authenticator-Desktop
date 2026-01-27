@@ -122,16 +122,12 @@ def edit_credentials_full_ui(root, build_main_ui_callback):
         if not platform:
             show_toast("❌ Platform name is required", err=True)
             return
-        
-        # Check if user provided either manual entry or QR
         has_manual = username and secret
         has_qr = qr_path and os.path.exists(qr_path)
         
         if not has_manual and not has_qr:
             show_toast("❌ Provide either manual entry (Username + Secret) OR a QR code", err=True)
             return
-        
-        # If both provided, use QR only (QR takes priority)
         if has_qr:
             success, msg = add_credential(platform, None, None, qr_path, config.decrypt_key)
         else:

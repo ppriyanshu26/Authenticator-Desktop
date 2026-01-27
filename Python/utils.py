@@ -124,7 +124,6 @@ def bind_enter(root, button):
 def truncate(text, max_len, suffix="..."):
     return f"{text[:max_len]}{suffix}" if len(text) > max_len else text
 
-# Legacy aliases for backward compatibility
 def copy_and_toast(var, root):
     pyperclip.copy(var.get())
     if config.toast_label: config.toast_label.destroy()
@@ -132,5 +131,5 @@ def copy_and_toast(var, root):
     config.toast_label.place(relx=0.5, rely=0.9, anchor='s')
     root.after(1500, lambda: config.toast_label.destroy() if config.toast_label else None)
 
-truncate_platform_name = lambda name: truncate(name, 20)
-truncate_username = lambda username: truncate(username, 35)
+truncate_platform_name = lambda name: truncate(name, 50)
+truncate_username = lambda username: truncate(username, 60)

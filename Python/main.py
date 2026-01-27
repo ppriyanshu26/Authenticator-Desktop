@@ -157,7 +157,7 @@ def build_main_ui(root, otp_entries):
     footer = ctk.CTkFrame(outer_frame, fg_color="#1e1e1e", corner_radius=0)
     footer.pack(side="bottom", fill="x")
     
-    for btn_text, cmd in [("🔄 Reset", lambda: reset_handler.reset_password_full_ui(root, otp_entries, build_main_ui)), ("➕ Add Creds", lambda: creds_handler.edit_credentials_full_ui(root, build_main_ui)), ("📥 Download", lambda: export_handler.handle_download(root))]:
+    for btn_text, cmd in [("🔄 Reset", lambda: reset_handler.reset_password_full_ui(root, otp_entries, build_main_ui)), ("➕ Add Creds", lambda: creds_handler.edit_credentials_full_ui(root, build_main_ui)), ("📥 Download", lambda: export_handler.handle_download(root)), ("🔃 Sync", lambda: None)]:
         ctk.CTkButton(footer, text=btn_text, font=("Segoe UI", 12), fg_color="#2b2b2b", text_color="white", hover_color="#3d3d3d", height=45, corner_radius=0, command=cmd).pack(side="left", fill="x", expand=True)
     
     config.inner_frame = ctk.CTkScrollableFrame(outer_frame, fg_color="#1e1e1e", corner_radius=0)
@@ -232,7 +232,7 @@ def build_lock_screen(root, otp_entries):
 if __name__ == "__main__":
     root = ctk.CTk()
     root.title("CipherAuth")
-    root.geometry("420x550")
+    root.geometry("560x550")
     root.configure(fg_color="#1e1e1e")
     root.resizable(False, False)
 
