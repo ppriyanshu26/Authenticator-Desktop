@@ -1,7 +1,7 @@
 import tkinter as tk
 import customtkinter as ctk
-import pyotp, sys, time, hashlib, ctypes, config
-import utils, reset_handler, creds_handler, export_handler
+import pyotp, sys, time, hashlib, ctypes, config, queue
+import utils, reset_handler, creds_handler, export_handler, sync_connection
 
 if sys.platform == "win32":
     try:
@@ -24,76 +24,197 @@ def build_sync_screen(root, otp_entries):
     root.unbind_all("<Return>")
     root.unbind_all("<Escape>")
     
+    password_hash = utils.get_stored_password()
+    sync_queue = queue.Queue()
+    screen_active = {'value': True}
+    
+    def process_sync_result():
+        try:
+            while True:
+                result = sync_queue.get_nowait()
+                if not screen_active['value']:
+                    return
+                is_match, merged_credentials = result if isinstance(result, tuple) else (result, None)
+                if is_match and merged_credentials:
+                    message = "✅ SYNC COMPLETE!"
+                    utils.save_otps_encrypted(merged_credentials, config.decrypt_key)
+                    print(f'[SYNC] Python reloading {len(merged_credentials)} credentials into memory')
+                    
+                    otp_entries.clear()
+                    otp_entries.extend(utils.decode_encrypted_file())
+                elif is_match:
+                    message = "✅ SYNC COMPLETE!"
+                else:
+                    message = "❌ PASSWORD MISMATCH"
+                color = "#28db73" if is_match else "#ff4d4d"
+                error_label.configure(text=message, text_color=color)
+                root.update_idletasks()
+        except queue.Empty:
+            pass
+        if screen_active['value']:
+            root.after(100, process_sync_result)
+    
+    if password_hash:
+        master_password = config.decrypt_key
+        local_credentials = utils.decode_encrypted_file()
+        sync_connection.SyncConnection.start_listening_for_sync(
+            password_hash, master_password, local_credentials, 
+            lambda success, merged: sync_queue.put((success, merged)), 
+            gui_queue=sync_queue
+        )
+    
+    def refresh_listening():
+        current_hash = utils.get_stored_password()
+        if current_hash:
+            master_password = config.decrypt_key
+            local_credentials = utils.decode_encrypted_file()
+            sync_connection.SyncConnection.start_listening_for_sync(
+                current_hash, master_password, local_credentials, 
+                lambda success, merged: sync_queue.put((success, merged)), 
+                gui_queue=sync_queue
+            )
+    
     frame = ctk.CTkFrame(root, fg_color="#1e1e1e")
     frame.pack(expand=True, fill="both")
     header = ctk.CTkFrame(frame, fg_color="#1e1e1e", corner_radius=0)
     header.pack(side="top", fill="x", padx=10, pady=(10, 5))
     
-    ctk.CTkLabel(header, text="🔃 Sync Settings", font=("Segoe UI", 18, "bold"), text_color="white").pack(side="left")
-    back_btn = ctk.CTkButton(header, text="← Back", width=80, height=35, font=("Segoe UI", 12), fg_color="#444", text_color="white", hover_color="#666", command=lambda: (utils.stop_sync_broadcast(), build_main_ui(root, otp_entries)))
+    ctk.CTkLabel(header, text="🔃 Sync Settings", font=("Segoe UI", 20, "bold"), text_color="white").pack(side="left")
+    back_btn = ctk.CTkButton(header, text="← Back", width=80, height=35, font=("Segoe UI", 12), fg_color="#444", text_color="white", hover_color="#666", command=lambda: (screen_active.update({'value': False}), utils.stop_sync_broadcast(), build_main_ui(root, otp_entries)))
     back_btn.pack(side="right")
     
     ctk.CTkFrame(root, height=1, fg_color="#333").pack(fill="x")
     content = ctk.CTkFrame(frame, fg_color="#1e1e1e")
     content.pack(fill="both", expand=True, padx=15, pady=15)
 
-    ctk.CTkLabel(content, text="Device Name", font=("Segoe UI", 12, "bold"), text_color="white").pack(anchor="w", pady=(0, 5))
+    ctk.CTkLabel(content, text="Device Name", font=("Segoe UI", 14, "bold"), text_color="white").pack(anchor="w", pady=(0, 5))
     current_name = utils.load_device_name()
-    name_entry = ctk.CTkEntry(content, font=("Segoe UI", 11), height=35, placeholder_text="Enter device name")
-    name_entry.insert(0, current_name)
-    name_entry.pack(fill="x", pady=(0, 10))
-    name_entry.focus_set()
     
-    error_label = ctk.CTkLabel(content, text="", text_color="red", font=("Segoe UI", 10))
-    error_label.pack(anchor="w", pady=(0, 5))
+    name_frame = ctk.CTkFrame(content, fg_color="transparent")
+    name_frame.pack(fill="x", pady=(0, 10))
+    
+    name_entry = ctk.CTkEntry(name_frame, font=("Segoe UI", 13), height=38, placeholder_text="Enter device name")
+    name_entry.insert(0, current_name)
+    name_entry.pack(side="left", fill="x", expand=True)
+    name_entry.focus_set()
     
     def save_device_name():
         name = name_entry.get().strip()
         if not name:
-            error_label.configure(text="❌ Device name cannot be empty")
+            error_label.configure(text="❌ Device name cannot be empty", text_color="#ff4d4d")
             return
         if utils.save_device_name(name):
             utils.start_sync_broadcast(name)
-            error_label.configure(text="✓ Device name saved & sync started", text_color="#28db73")
-            root.after(1500, lambda: (utils.stop_sync_broadcast(), build_main_ui(root, otp_entries)))
+            refresh_listening()
+            error_label.configure(text="✓ Device name saved!", text_color="#28db73")
         else:
-            error_label.configure(text="❌ Failed to save device name")
+            error_label.configure(text="❌ Failed to save device name", text_color="#ff4d4d")
     
-    save_btn = ctk.CTkButton(content, text="Save Device Name", font=("Segoe UI", 11, "bold"), height=35, fg_color="#0d7377", hover_color="#14919b", command=save_device_name)
-    save_btn.pack(fill="x", pady=(0, 15))
+    save_btn = ctk.CTkButton(name_frame, text="Save", font=("Segoe UI", 12, "bold"), width=70, height=38, fg_color="#0d7377", hover_color="#14919b", command=save_device_name)
+    save_btn.pack(side="right", padx=(10, 0))
     
-    ctk.CTkLabel(content, text="Available Devices", font=("Segoe UI", 12, "bold"), text_color="white").pack(anchor="w", pady=(5, 5))
+    error_label = ctk.CTkLabel(content, text="", text_color="red", font=("Segoe UI", 12))
+    error_label.pack(anchor="w", pady=(0, 10))
+    
+    ctk.CTkLabel(content, text="Available Devices", font=("Segoe UI", 14, "bold"), text_color="white").pack(anchor="w", pady=(10, 5))
+    
+    search_btn = ctk.CTkButton(content, text="🔄 Search Again", font=("Segoe UI", 12), height=35, fg_color="#0d7377", hover_color="#14919b", command=None, state="disabled")
+    search_btn.pack(fill="x", pady=(0, 8))
+    
     devices_frame = ctk.CTkScrollableFrame(content, fg_color="#2b2b2b", corner_radius=8, height=150)
-    devices_frame.pack(fill="both", expand=True, pady=(0, 10))
-    loading_label = ctk.CTkLabel(devices_frame, text="🔍 Scanning for devices...", font=("Segoe UI", 11), text_color="#888")
+    devices_frame.pack(fill="both", expand=True, pady=(0, 0))
+    loading_label = ctk.CTkLabel(devices_frame, text="🔍 Scanning for devices...", font=("Segoe UI", 13), text_color="#888")
     loading_label.pack(pady=20)
     
+    def on_search_complete():
+        try:
+            if search_btn.winfo_exists():
+                search_btn.configure(state="normal")
+                search_btn.configure(command=lambda: (search_btn.configure(state="disabled"), refresh_listening(), load_devices(), root.after(3100, on_search_complete)))
+        except:
+            pass
+    
     def load_devices():
-        loading_label.pack_forget()
+        try:
+            search_btn.configure(state="disabled")
+        except:
+            pass
         for w in devices_frame.winfo_children():
             w.destroy()
+        
+        loading_label = ctk.CTkLabel(devices_frame, text="🔍 Scanning for devices...", font=("Segoe UI", 13), text_color="#888")
+        loading_label.pack(pady=20)
         
         current_name = utils.load_device_name()
         devices = utils.discover_cipherauth_devices(exclude_device_name=current_name)
         
+        loading_label.destroy()
+        
         if not devices:
-            ctk.CTkLabel(devices_frame, text="No CipherAuth devices found", font=("Segoe UI", 11), text_color="#888").pack(pady=20)
+            ctk.CTkLabel(devices_frame, text="No CipherAuth devices found", font=("Segoe UI", 13), text_color="#888").pack(pady=20)
         else:
             for device in devices:
                 device_item = ctk.CTkFrame(devices_frame, fg_color="#1e1e1e", corner_radius=6)
-                device_item.pack(fill="x", padx=5, pady=4)
+                device_item.pack(fill="x", padx=5, pady=6)
                 
-                name_label = ctk.CTkLabel(device_item, text=device['name'], font=("Segoe UI", 10, "bold"), text_color="#aaa")
-                name_label.pack(anchor="w", padx=10, pady=(6, 2))
+                device_name = device['name']
+                if len(device_name) > 30:
+                    display_name = device_name[:27] + "..."
+                else:
+                    display_name = device_name.ljust(30)
                 
-                ip_label = ctk.CTkLabel(device_item, text=device['ip'], font=("Segoe UI", 9), text_color="#666")
-                ip_label.pack(anchor="w", padx=10, pady=(0, 6))
+                name_label = ctk.CTkLabel(device_item, text=display_name, font=("Segoe UI", 13, "bold"), text_color="#aaa", width=120, anchor="w")
+                name_label.pack(side="left", padx=10, pady=10)
+                
+                ip_label = ctk.CTkLabel(device_item, text=device['ip'], font=("Segoe UI", 13), text_color="#666", width=140, anchor="w")
+                ip_label.pack(side="left", padx=5, pady=10)
+                
+                def connect_to_device(ip=device['ip']):
+                    current_hash = utils.get_stored_password()
+                    if not current_hash:
+                        error_label.configure(text="❌ No password set", text_color="#ff4d4d")
+                        return
+                    
+                    master_password = config.decrypt_key
+                    if not master_password:
+                        error_label.configure(text="❌ Cannot retrieve master password", text_color="#ff4d4d")
+                        return
+                    
+                    local_credentials = utils.decode_encrypted_file()
+                    print(f'[SYNC] Python initiating sync with {ip}, {len(local_credentials)} local credentials')
+                    
+                    result = sync_connection.SyncConnection.send_password_hash_and_sync(
+                        ip, current_hash, master_password, local_credentials
+                    )
+                    
+                    print(f'[SYNC] Python sync result: success={result.get("success")}, reason={result.get("reason")}')
+                    if result.get('success'):
+                        merged_creds = result.get('merged_credentials', [])
+                        if merged_creds:
+                            print(f'[SYNC] Python saving {len(merged_creds)} merged credentials')
+                            utils.save_otps_encrypted(merged_creds, master_password)
+                            print(f'[SYNC] Python reloading {len(merged_creds)} credentials into memory')
+                            
+                            otp_entries.clear()
+                            otp_entries.extend(utils.decode_encrypted_file())
+                        error_label.configure(text="✅ SYNC COMPLETE!", text_color="#28db73")
+                    else:
+                        reason = result.get('reason', 'unknown_error')
+                        if reason == 'password_mismatch':
+                            error_label.configure(text="❌ PASSWORD MISMATCH", text_color="#ff4d4d")
+                        else:
+                            error_label.configure(text=f"❌ Sync failed: {reason}", text_color="#ff4d4d")
+                
+                connect_btn = ctk.CTkButton(device_item, text="Connect", width=80, height=36, font=("Segoe UI", 12), fg_color="#0d7377", hover_color="#14919b", command=connect_to_device)
+                connect_btn.pack(side="right", padx=8, pady=8)
     
     utils.start_sync_broadcast(current_name)
-    root.after(500, load_devices)
+    refresh_listening()
+    process_sync_result()
+    root.after(1200, lambda: (load_devices(), root.after(3100, on_search_complete)))
     
     root.bind("<Return>", lambda _: save_device_name())
-    root.bind("<Escape>", lambda _: (utils.stop_sync_broadcast(), build_main_ui(root, otp_entries)))
+    root.bind("<Escape>", lambda _: (screen_active.update({'value': False}), utils.stop_sync_broadcast(), build_main_ui(root, otp_entries)))
 
 def open_popup(func, title="Popup", size="370x300", *args, **kwargs):
     if config.popup_window and config.popup_window.winfo_exists():

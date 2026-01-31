@@ -125,7 +125,7 @@ class SyncDeviceAdvertiser:
         self.thread = None
         self.sock = None
     
-    def _get_local_ip(self):
+    def get_local_ip(self):
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
@@ -139,7 +139,7 @@ class SyncDeviceAdvertiser:
         if self.running:
             return
         self.running = True
-        self.thread = threading.Thread(target=self._broadcast_loop, daemon=True)
+        self.thread = threading.Thread(target=self.broadcast_loop, daemon=True)
         self.thread.start()
     
     def stop(self):
@@ -150,14 +150,13 @@ class SyncDeviceAdvertiser:
             except:
                 pass
     
-    def _broadcast_loop(self):
+    def broadcast_loop(self):
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             
-            local_ip = self._get_local_ip()
-            print(f"[BROADCAST] Starting broadcast as '{self.device_name}' on IP {local_ip}")
+            local_ip = self.get_local_ip()
             
             while self.running:
                 try:
@@ -168,15 +167,12 @@ class SyncDeviceAdvertiser:
                         "timestamp": time.time()
                     }).encode('utf-8')
                     
-                    print(f"[BROADCAST] Sending: {message.decode('utf-8')}")
                     self.sock.sendto(message, ('<broadcast>', self.BROADCAST_PORT))
                 except Exception as e:
-                    print(f"[BROADCAST] Send error: {e}")
                     pass
                 
                 time.sleep(1)
         except Exception as e:
-            print(f"[BROADCAST] Loop error: {e}")
             pass
         finally:
             if self.sock:
@@ -185,20 +181,20 @@ class SyncDeviceAdvertiser:
                 except:
                     pass
 
-_advertiser = None
+advertizer = None
 
 def start_sync_broadcast(device_name):
-    global _advertiser
-    if _advertiser:
-        _advertiser.stop()
-    _advertiser = SyncDeviceAdvertiser(device_name)
-    _advertiser.start()
+    global advertizer
+    if advertizer:
+        advertizer.stop()
+    advertizer = SyncDeviceAdvertiser(device_name)
+    advertizer.start()
 
 def stop_sync_broadcast():
-    global _advertiser
-    if _advertiser:
-        _advertiser.stop()
-        _advertiser = None
+    global advertizer
+    if advertizer:
+        advertizer.stop()
+        advertizer = None
 
 def discover_cipherauth_devices(exclude_device_name=None):
     try:
@@ -209,23 +205,19 @@ def discover_cipherauth_devices(exclude_device_name=None):
         
         devices = {}
         start_time = time.time()
-        print(f"[DISCOVERY] Starting discovery on port {SyncDeviceAdvertiser.BROADCAST_PORT}...")
         
         while time.time() - start_time < 3:
             try:
                 data, addr = sock.recvfrom(1024)
                 message = json.loads(data.decode('utf-8'))
-                print(f"[DISCOVERY] Received: {message} from {addr}")
                 
                 if message.get('type') == SyncDeviceAdvertiser.SERVICE_TYPE:
                     device_name = message.get('device_name', 'Unknown')
                     
                     if exclude_device_name and device_name == exclude_device_name:
-                        print(f"[DISCOVERY] Excluding own device: {device_name}")
                         continue
                     
                     device_ip = message.get('ip', addr[0])
-                    print(f"[DISCOVERY] Found device: {device_name} ({device_ip})")
                     devices[device_name] = {
                         'name': device_name,
                         'ip': device_ip,
@@ -234,13 +226,10 @@ def discover_cipherauth_devices(exclude_device_name=None):
             except socket.timeout:
                 break
             except Exception as e:
-                print(f"[DISCOVERY] Error parsing message: {e}")
                 pass
         sock.close()
-        print(f"[DISCOVERY] Discovery complete. Found {len(devices)} devices")
         return list(devices.values())
     except Exception as e:
-        print(f"[DISCOVERY] Discovery error: {e}")
         return []
 
 def get_stored_password():

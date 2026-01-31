@@ -3,7 +3,7 @@ from tkinter import filedialog
 import customtkinter as ctk
 import os, time, hashlib, config, utils, aes, qrcode, io, pyotp
 
-def _save_qr_from_path(crypto, qr_folder, platform, qr_path):
+def save_qr_from_path(crypto, qr_folder, platform, qr_path):
     with open(qr_path, 'rb') as f:
         original_data = f.read()
     uri = utils.read_qr_from_bytes(original_data)
@@ -15,7 +15,7 @@ def _save_qr_from_path(crypto, qr_folder, platform, qr_path):
     open(enc_img_path, 'wb').write(enc_img_data)
     return (secret, username_from_uri, enc_img_path), None
 
-def _save_qr_from_secret(crypto, qr_folder, platform, username, secret):
+def save_qr_from_secret(crypto, qr_folder, platform, username, secret):
     try:
         secret = secret.replace(" ", "").upper()
         pyotp.TOTP(secret).now()
@@ -41,12 +41,12 @@ def add_credential(platform, username=None, secret=None, qr_path=None, key=None)
     enc_img_path = None
     
     if qr_path and os.path.exists(qr_path):
-        result, err = _save_qr_from_path(crypto, qr_folder, platform, qr_path)
+        result, err = save_qr_from_path(crypto, qr_folder, platform, qr_path)
         if err: return False, err
         secret, username_from_uri, enc_img_path = result
         username = username or username_from_uri
     elif secret and username:
-        result, err = _save_qr_from_secret(crypto, qr_folder, platform, username, secret)
+        result, err = save_qr_from_secret(crypto, qr_folder, platform, username, secret)
         if err: return False, err
         secret, _, enc_img_path = result
     else:
