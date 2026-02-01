@@ -16,13 +16,12 @@ def reencrypt_all_data(old_key, new_key):
                     new_enc_data = new_crypto.encrypt_bytes(old_crypto.decrypt_bytes(open(enc_img_path, 'rb').read()))
                     open(enc_img_path, 'wb').write(new_enc_data)
                 except Exception as e:
-                    print(f"Warning: Failed to re-encrypt image {enc_img_path}: {e}")
+                    pass
         
         utils.save_otps_encrypted(otps, new_key)
         config.decrypt_key = new_key
         return True
     except Exception as e:
-        print(f"Re-encryption failed: {e}")
         config.decrypt_key = None
         return False
 

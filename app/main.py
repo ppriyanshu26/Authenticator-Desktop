@@ -38,7 +38,6 @@ def build_sync_screen(root, otp_entries):
                 if is_match and merged_credentials:
                     message = "✅ SYNC COMPLETE!"
                     utils.save_otps_encrypted(merged_credentials, config.decrypt_key)
-                    print(f'[SYNC] Python reloading {len(merged_credentials)} credentials into memory')
                     
                     otp_entries.clear()
                     otp_entries.extend(utils.decode_encrypted_file())
@@ -80,7 +79,7 @@ def build_sync_screen(root, otp_entries):
     header.pack(side="top", fill="x", padx=10, pady=(10, 5))
     
     ctk.CTkLabel(header, text="🔃 Sync Settings", font=("Segoe UI", 20, "bold"), text_color="white").pack(side="left")
-    back_btn = ctk.CTkButton(header, text="← Back", width=80, height=35, font=("Segoe UI", 12), fg_color="#444", text_color="white", hover_color="#666", command=lambda: (screen_active.update({'value': False}), utils.stop_sync_broadcast(), build_main_ui(root, otp_entries)))
+    back_btn = ctk.CTkButton(header, text="← Back", width=80, height=35, font=("Segoe UI", 12), fg_color="#444", text_color="white", hover_color="#666", command=lambda: (screen_active.update({'value': False}), utils.stop_sync_broadcast(), root.unbind_all("<Return>"), root.unbind_all("<Escape>"), build_main_ui(root, otp_entries)))
     back_btn.pack(side="right")
     
     ctk.CTkFrame(root, height=1, fg_color="#333").pack(fill="x")
@@ -181,19 +180,15 @@ def build_sync_screen(root, otp_entries):
                         return
                     
                     local_credentials = utils.decode_encrypted_file()
-                    print(f'[SYNC] Python initiating sync with {ip}, {len(local_credentials)} local credentials')
                     
                     result = sync_connection.SyncConnection.send_password_hash_and_sync(
                         ip, current_hash, master_password, local_credentials
                     )
                     
-                    print(f'[SYNC] Python sync result: success={result.get("success")}, reason={result.get("reason")}')
                     if result.get('success'):
                         merged_creds = result.get('merged_credentials', [])
                         if merged_creds:
-                            print(f'[SYNC] Python saving {len(merged_creds)} merged credentials')
                             utils.save_otps_encrypted(merged_creds, master_password)
-                            print(f'[SYNC] Python reloading {len(merged_creds)} credentials into memory')
                             
                             otp_entries.clear()
                             otp_entries.extend(utils.decode_encrypted_file())

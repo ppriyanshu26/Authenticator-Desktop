@@ -7,12 +7,29 @@ import aes
 
 class SyncConnection:
     SYNC_PORT = 34568
-    current_server = None
-    listening_thread = None
+    currServer = None
+    listenThread = None
+    
+    @staticmethod
+    def _recv_message(sock):
+        buffer = b''
+        while True:
+            chunk = sock.recv(1024)
+            if not chunk:
+                return None
+            buffer += chunk
+            if b'\n' in buffer:
+                message_str, remainder = buffer.split(b'\n', 1)
+                return message_str.decode('utf-8')
+    
+    @staticmethod
+    def _send_message(sock, message_dict):
+        message_str = json.dumps(message_dict)
+        sock.send((message_str + '\n').encode('utf-8'))
     
     @staticmethod
     def stop_listening():
-        if SyncConnection.current_server:
+        if SyncConnection.currServer:
             try:
                 SyncConnection.currServer.close()
             except:
@@ -22,32 +39,30 @@ class SyncConnection:
     @staticmethod
     def send_password_hash_and_sync(device_ip, password_hash, master_password, local_credentials):
         try:
-            print(f'[SYNC_CONN] Connecting to {device_ip}:{SyncConnection.SYNC_PORT}')
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(5)
             sock.connect((device_ip, SyncConnection.SYNC_PORT))
             
-            message = json.dumps({
+            SyncConnection._send_message(sock, {
                 'type': 'PASSWORD_HASH',
                 'hash': password_hash,
             })
-            print(f'[SYNC_CONN] Sending: {message}')
-            sock.send(message.encode('utf-8'))
-            
-            response = sock.recv(1024)
-            remote_message = json.loads(response.decode('utf-8'))
-            print(f'[SYNC_CONN] Received: {remote_message}')
+            response_str = SyncConnection._recv_message(sock)
+            if not response_str:
+                sock.close()
+                return {'success': False, 'reason': 'no_response'}
+            remote_message = json.loads(response_str)
             
             if remote_message.get('hash') != password_hash:
                 sock.close()
                 return {'success': False, 'reason': 'password_mismatch'}
+            SyncConnection._send_message(sock, {'type': 'REQUEST_DATA'})
             
-            request_message = json.dumps({'type': 'REQUEST_DATA'})
-            sock.send(request_message.encode('utf-8'))
-            
-            data_response = sock.recv(8192)
-            data_message = json.loads(data_response.decode('utf-8'))
-            print(f'[SYNC_CONN] Received data response type: {data_message.get("type")}')
+            data_response_str = SyncConnection._recv_message(sock)
+            if not data_response_str:
+                sock.close()
+                return {'success': False, 'reason': 'no_response'}
+            data_message = json.loads(data_response_str)
             
             if data_message.get('type') != 'DATA_RESPONSE':
                 sock.close()
@@ -59,7 +74,6 @@ class SyncConnection:
                 decrypted_remote_data = crypto.decrypt_aes(encrypted_remote_data)
                 remote_credentials = json.loads(decrypted_remote_data)
             except Exception as e:
-                print(f'[SYNC_CONN] Decryption error: {e}')
                 sock.close()
                 return {'success': False, 'reason': 'decryption_error'}
             
@@ -70,21 +84,17 @@ class SyncConnection:
                 crypto = aes.Crypto(master_password)
                 encrypted_merged_data = crypto.encrypt_aes(merged_json)
             except Exception as e:
-                print(f'[SYNC_CONN] Encryption error: {e}')
                 sock.close()
                 return {'success': False, 'reason': 'encryption_error'}
             
-            merged_message = json.dumps({
+            SyncConnection._send_message(sock, {
                 'type': 'MERGED_DATA',
                 'encrypted_data': encrypted_merged_data,
             })
-            sock.send(merged_message.encode('utf-8'))
             sock.close()
             
-            print('[SYNC_CONN] PASSWORD MATCH AND CREDENTIALS SYNCED!')
             return {'success': True, 'merged_credentials': merged_credentials}
         except Exception as e:
-            print(f'[SYNC_CONN] Error: {e}')
             return {'success': False, 'reason': 'connection_error', 'error': str(e)}
     
     @staticmethod
@@ -99,13 +109,11 @@ class SyncConnection:
                 server.bind(('0.0.0.0', SyncConnection.SYNC_PORT))
                 server.listen(1)
                 SyncConnection.currServer = server
-                print(f'[SYNC_CONN] Listening on port {SyncConnection.SYNC_PORT}')
                 
                 while SyncConnection.currServer is server:
                     try:
                         server.settimeout(1)
                         client_sock, client_addr = server.accept()
-                        print(f'[SYNC_CONN] Client connected from {client_addr}')
                         
                         SyncConnection.handle_sync_connection(
                             client_sock,
@@ -121,7 +129,7 @@ class SyncConnection:
                         if SyncConnection.currServer is server:
                             pass
             except Exception as e:
-                print(f'[SYNC_CONN] Server error: {e}')
+                pass
             finally:
                 try:
                     server.close()
@@ -129,7 +137,7 @@ class SyncConnection:
                     pass
         
         thread = threading.Thread(target=listen_thread, daemon=True)
-        SyncConnection.listeningThreadhread = thread
+        SyncConnection.listenThread = thread
         thread.start()
     
     @staticmethod
@@ -138,24 +146,22 @@ class SyncConnection:
             password_matched = False
             
             while True:
-                data = client_sock.recv(1024)
-                if not data:
+                message_str = SyncConnection._recv_message(client_sock)
+                if not message_str:
                     break
                 
-                message = json.loads(data.decode('utf-8'))
+                message = json.loads(message_str)
                 message_type = message.get('type')
-                print(f'[SYNC_CONN] Received: {message_type}')
                 
                 if message_type == 'PASSWORD_HASH':
                     remote_hash = message.get('hash')
                     password_matched = remote_hash == password_hash
                     
-                    response = json.dumps({
+                    SyncConnection._send_message(client_sock, {
                         'type': 'PASSWORD_HASH_RESPONSE',
                         'hash': password_hash,
                         'match': password_matched,
                     })
-                    client_sock.send(response.encode('utf-8'))
                     
                 elif message_type == 'REQUEST_DATA' and password_matched:
                     try:
@@ -163,13 +169,11 @@ class SyncConnection:
                         crypto = aes.Crypto(master_password)
                         encrypted_data = crypto.encrypt_aes(credentials_json)
                         
-                        response = json.dumps({
+                        SyncConnection._send_message(client_sock, {
                             'type': 'DATA_RESPONSE',
                             'encrypted_data': encrypted_data,
                         })
-                        client_sock.send(response.encode('utf-8'))
                     except Exception as e:
-                        print(f'[SYNC_CONN] Encryption error: {e}')
                         client_sock.close()
                         break
                 
@@ -180,8 +184,6 @@ class SyncConnection:
                         decrypted_merged_data = crypto.decrypt_aes(encrypted_merged_data)
                         merged_credentials = json.loads(decrypted_merged_data)
                         
-                        print('[SYNC_CONN] RECEIVED MERGED DATA - SYNC COMPLETE!')
-                        
                         if gui_queue:
                             gui_queue.put((True, merged_credentials))
                         else:
@@ -190,11 +192,10 @@ class SyncConnection:
                         client_sock.close()
                         break
                     except Exception as e:
-                        print(f'[SYNC_CONN] Decryption error: {e}')
                         client_sock.close()
                         break
         except Exception as e:
-            print(f'[SYNC_CONN] Connection error: {e}')
+            pass
         finally:
             try:
                 client_sock.close()
