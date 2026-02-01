@@ -315,7 +315,7 @@ def render_otp_list(root, otp_entries, query=""):
                     lbl.image = img_ctk
                     hint.configure(text="Tap to unblur QR")
         
-        qr_btn.configure(command=lambda f=qr_frame, btn=qr_btn: (f.pack_forget() if f.winfo_viewable() else (f.pack(fill="x", pady=(0, 10)), show_qr(f)), btn.configure(text="Hide QR" if f.winfo_viewable() else "View QR")))
+        qr_btn.configure(command=lambda f=qr_frame, btn=qr_btn, sq=show_qr: (f.pack_forget() if f.winfo_viewable() else (f.pack(fill="x", pady=(0, 10)), sq(f)), btn.configure(text="Hide QR" if f.winfo_viewable() else "View QR")))
 
 def update_totps(root):
     for entry in config.frames:

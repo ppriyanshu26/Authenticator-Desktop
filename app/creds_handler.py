@@ -3,58 +3,22 @@ from tkinter import filedialog
 import customtkinter as ctk
 import os, time, hashlib, config, utils, aes, qrcode, io, pyotp
 
-def save_qr_from_path(crypto, qr_folder, platform, qr_path):
-    with open(qr_path, 'rb') as f:
-        original_data = f.read()
-    uri = utils.read_qr_from_bytes(original_data)
-    if not uri: return None, "Could not read QR code from image"
-    secret = utils.extract_secret_from_uri(uri)
-    _, _, username_from_uri = utils.clean_uri(uri)
-    enc_img_data = crypto.encrypt_bytes(original_data)
-    enc_img_path = os.path.join(qr_folder, f"{hashlib.md5(f'{platform}{time.time()}'.encode()).hexdigest()}.enc")
-    open(enc_img_path, 'wb').write(enc_img_data)
-    return (secret, username_from_uri, enc_img_path), None
-
-def save_qr_from_secret(crypto, qr_folder, platform, username, secret):
-    try:
-        secret = secret.replace(" ", "").upper()
-        pyotp.TOTP(secret).now()
-        uri = pyotp.totp.TOTP(secret).provisioning_uri(name=username, issuer_name=platform)
-        qr = qrcode.QRCode(version=1, box_size=10, border=5)
-        qr.add_data(uri)
-        qr.make(fit=True)
-        img = qr.make_image(fill_color="black", back_color="white")
-        img_byte_arr = io.BytesIO()
-        img.save(img_byte_arr, format='PNG')
-        enc_img_data = crypto.encrypt_bytes(img_byte_arr.getvalue())
-        enc_img_path = os.path.join(qr_folder, f"{hashlib.md5(f'{platform}{time.time()}'.encode()).hexdigest()}.enc")
-        open(enc_img_path, 'wb').write(enc_img_data)
-        return (secret, None, enc_img_path), None
-    except Exception as e:
-        return None, f"Error generating QR: {e}"
-
 def add_credential(platform, username=None, secret=None, qr_path=None, key=None):
-    crypto = aes.Crypto(key)
-    qr_folder = os.path.join(config.APP_FOLDER, "qrs")
-    os.makedirs(qr_folder, exist_ok=True)
-    
-    enc_img_path = None
-    
     if qr_path and os.path.exists(qr_path):
-        result, err = save_qr_from_path(crypto, qr_folder, platform, qr_path)
-        if err: return False, err
-        secret, username_from_uri, enc_img_path = result
+        with open(qr_path, 'rb') as f:
+            original_data = f.read()
+        uri = utils.read_qr_from_bytes(original_data)
+        if not uri: return False, "Could not read QR code from image"
+        secret = utils.extract_secret_from_uri(uri)
+        _, _, username_from_uri = utils.clean_uri(uri)
         username = username or username_from_uri
     elif secret and username:
-        result, err = save_qr_from_secret(crypto, qr_folder, platform, username, secret)
-        if err: return False, err
-        secret, _, enc_img_path = result
+        pass
     else:
         return False, "Provide either a QR code or Secret Key + Username"
     
     cred_id = utils.generate_id(platform, secret)
     new_cred = {"id": cred_id, "platform": platform, "username": username, "secretcode": secret}
-    if enc_img_path: utils.save_image_path(cred_id, enc_img_path)
     
     all_creds = utils.decode_encrypted_file()
     all_creds.append(new_cred)
