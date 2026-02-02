@@ -15,6 +15,7 @@ CipherAuth is officially available for Windows via the Microsoft Store. Get it h
 - **QR Code Support:** View and scan QR codes for easy setup.
 - **Export/Import:** Easily backup and restore your credentials.
 - **Password Protected:** Secured by a master password to prevent unauthorized access.
+- **Sync:** Sync your credentials securely to another device.
 
 ## 🛠️ Development & Compilation
 
@@ -27,9 +28,19 @@ CipherAuth is ready to be compiled for any operating system (Windows, macOS, Lin
    ```bash
    pip install -r requirements.txt
    ```
+   
+   > **Note for Windows users:** PyInstaller packages are commented out in `requirements.txt`. If you're on Windows and planning to build an executable, uncomment the Windows-specific packages in `requirements.txt` before installing:
+   > ```
+   > altgraph==0.17.4
+   > pefile==2023.2.7
+   > pyinstaller==6.15.0
+   > pyinstaller-hooks-contrib==2025.8
+   > pywin32-ctypes==0.2.3
+   > ```
+
 3. Run the application:
    ```bash
-   python Python/main.py
+   python app/main.py
    ```
 
 ### Compiling with PyInstaller
@@ -58,7 +69,7 @@ Use the **"📥 Download"** button to export an encrypted version of your creden
 Yes! Since it is written in Python, you can run it from source or compile it using PyInstaller on your respective operating system.
 
 ### Is my data synced to the cloud?
-No. CipherAuth is designed to be fully offline for maximum privacy. Your data stays on your device.
+No. CipherAuth is designed to be fully offline for maximum privacy. Your data stays on your device. However, you can sync your credentials across multiple devices on the same network using the built-in **Sync** feature (🔃). Devices must have the same master password encryption key to synchronize securely.
 
 ## ⚠️ Important Note
 

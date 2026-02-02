@@ -8,15 +8,15 @@ block_cipher = None
 ctk_path = os.path.dirname(customtkinter.__file__)
 
 a = Analysis(
-    ['Python/main.py'],
+    ['app/main.py'],
     pathex=[],
     binaries=[],
     datas=[
         (ctk_path, 'customtkinter/'),
-        ('Python/*.py', 'Python/'),
-        ('Python/icon.ico', 'Python/')
+        ('app/*.py', 'app/'),
+        ('app/icon.ico', 'app/')
     ],
-    hiddenimports=['pyotp', 'pyperclip', 'cv2', 'PIL', 'qrcode', 'cryptography'],
+    hiddenimports=['pyotp', 'pyperclip', 'cv2', 'PIL', 'qrcode', 'cryptography', 'socket', 'threading', 'subprocess', 'aes'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
