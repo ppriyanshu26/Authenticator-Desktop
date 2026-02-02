@@ -126,6 +126,25 @@ def generate_qr_from_secret(platform, username, secret):
         img = qr.make_image(fill_color="black", back_color="white")
         if img.mode != "RGBA": img = img.convert("RGBA")
         img = img.resize((200, 200), Image.Resampling.LANCZOS)
+        
+        if getattr(sys, 'frozen', False):
+            app_dir = sys._MEIPASS
+        else:
+            app_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        icon_path = os.path.join(app_dir, "icon.png")
+        if os.path.exists(icon_path):
+            try:
+                icon = Image.open(icon_path)
+                if icon.mode != "RGBA": icon = icon.convert("RGBA")
+                icon_size = 50
+                icon = icon.resize((icon_size, icon_size), Image.Resampling.LANCZOS)
+                
+                icon_x = (img.width-icon_size)//2
+                icon_y = (img.height-icon_size)//2
+                img.paste(icon, (icon_x, icon_y), icon)
+            except: pass
+        
         return img
     except: return None
 
@@ -168,9 +187,9 @@ def load_device_name():
         if os.path.exists(config.DEVICE_NAME_FILE):
             with open(config.DEVICE_NAME_FILE, 'r') as f:
                 content = f.read().strip()
-                return content if content else "Authenticator Desktop"
+                return content if content else "CipherAuth Desktop"
     except: pass
-    return "Authenticator Desktop"
+    return "CipherAuth Desktop"
 
 class SyncDeviceAdvertiser:
     BROADCAST_PORT = 34567

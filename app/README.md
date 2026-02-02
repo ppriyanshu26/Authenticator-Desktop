@@ -12,7 +12,7 @@ This directory contains the Python backend and UI logic for CipherAuth.
 - **[reset_handler.py](reset_handler.py):** Manages the master password reset process and ensures all saved data is re-encrypted with the new key.
 - **[sync_connection.py](sync_connection.py):** Handles the syncing of credentials between devices on the `same local network`.
 - **[utils.py](utils.py):** A utility module providing helper functions for QR code decoding, clipboard operations, file handling, and UI interactions.
-- **[icon.ico](icon.ico):** The application icon asset used for the window and taskbar.
+- **[icon.png](icon.png):** The application icon asset used for the window and taskbar.
 
 ## Note
 These files are designed to be cross-platform and rely on the dependencies listed in the root `requirements.txt`.

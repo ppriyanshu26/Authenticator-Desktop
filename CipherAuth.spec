@@ -14,7 +14,7 @@ a = Analysis(
     datas=[
         (ctk_path, 'customtkinter/'),
         ('app/*.py', 'app/'),
-        ('app/icon.ico', 'app/')
+        ('app/icon.png', 'app/')
     ],
     hiddenimports=['pyotp', 'pyperclip', 'cv2', 'PIL', 'qrcode', 'cryptography', 'socket', 'threading', 'subprocess', 'aes'],
     hookspath=[],
@@ -48,5 +48,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['Python/icon.ico'],
+    icon='app/icon.png',
 )
