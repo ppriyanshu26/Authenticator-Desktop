@@ -128,7 +128,7 @@ def generate_qr_from_secret(platform, username, secret):
         img = img.resize((200, 200), Image.Resampling.LANCZOS)
         
         if getattr(sys, 'frozen', False):
-            app_dir = sys._MEIPASS
+            app_dir = os.path.join(sys._MEIPASS, 'app')
         else:
             app_dir = os.path.dirname(os.path.abspath(__file__))
         
